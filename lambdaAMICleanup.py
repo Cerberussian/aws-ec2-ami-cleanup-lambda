@@ -1,6 +1,6 @@
 # Automated AMI and Snapshot Deletion
 #
-# @author Robert Kozora <robert.kozora@wheaton.com>
+# @author Robert Kozora <bobby@kozora.me>
 #
 # This script will search for all instances having a tag with "Backup" or "backup"
 # on it. As soon as we have the instances list, we loop through each instance
