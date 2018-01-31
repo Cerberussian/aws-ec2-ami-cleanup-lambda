@@ -37,10 +37,7 @@ def lambda_handler(event, context):
 
     print "Found %d instances that need evaluated" % len(instances)
 
-    to_tag = collections.defaultdict(list)
-
-    date = datetime.datetime.now()
-    date_fmt = date.strftime('%Y-%m-%d')
+    date = datetime.datetime.now().date.strftime('%Y-%m-%d')
 
     imagesList = []
 
@@ -49,7 +46,7 @@ def lambda_handler(event, context):
 
     # Loop through all of our instances with a tag named "Backup"
     for instance in instances:
-	imagecount = 0
+	    imagecount = 0
 
         # Loop through each image of our current instance
         for image in images:
