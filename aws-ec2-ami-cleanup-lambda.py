@@ -10,10 +10,8 @@
 # snapshots associated with that AMI.
 
 import boto3
-import collections
 import datetime
 import time
-import sys
 
 ec = boto3.client('ec2', 'us-east-1')
 ec2 = boto3.resource('ec2', 'us-east-1')
@@ -37,7 +35,9 @@ def lambda_handler(event, context):
 
     print "Found %d instances that need evaluated" % len(instances)
 
-    date = datetime.datetime.now().date.strftime('%Y-%m-%d')
+    date_fmt = datetime.datetime.now().strftime('%Y-%m-%d')
+
+    print "Current date: " + date_fmt
 
     imagesList = []
 
@@ -46,7 +46,7 @@ def lambda_handler(event, context):
 
     # Loop through all of our instances with a tag named "Backup"
     for instance in instances:
-	    imagecount = 0
+        imagecount = 0
 
         # Loop through each image of our current instance
         for image in images:
@@ -58,7 +58,7 @@ def lambda_handler(event, context):
                 # print "FOUND IMAGE " + image.id + " FOR INSTANCE " + instance['InstanceId']
 
                 # Count this image's occcurance
-	        imagecount = imagecount + 1
+                imagecount = imagecount + 1
 
                 try:
                     if image.tags is not None:
@@ -83,7 +83,7 @@ def lambda_handler(event, context):
                 if image.name.endswith(date_fmt):
                     # Our latest backup from our other Lambda Function succeeded
                     backupSuccess = True
-                    print "Latest backup from " + date_fmt + " was a success"
+                    print "Latest backup from " + date_fmt + " was a success for " + instance['InstanceId']
 
         print "instance " + instance['InstanceId'] + " has " + str(imagecount) + " AMIs"
 
