@@ -13,13 +13,13 @@ import boto3
 import datetime
 import time
 
-ec = boto3.client('ec2', 'us-east-1')
-ec2 = boto3.resource('ec2', 'us-east-1')
-images = ec2.images.filter(Owners=["self"])
+ec2_client = boto3.client('ec2')
+ec2_resource = boto3.resource('ec2')
+images = ec2_resource.images.filter(Owners=["self"])
 
 def lambda_handler(event, context):
 
-    reservations = ec.describe_instances(
+    reservations = ec2_client.describe_instances(
         Filters=[
             {'Name': 'tag-key', 'Values': ['backup', 'Backup']},
         ]
@@ -95,19 +95,122 @@ def lambda_handler(event, context):
     if backupSuccess == True:
 
         myAccount = boto3.client('sts').get_caller_identity()['Account']
-        snapshots = ec.describe_snapshots(MaxResults=1000, OwnerIds=[myAccount])['Snapshots']
+        snapshots = ec2_client.describe_snapshots(MaxResults=1000, OwnerIds=[myAccount])['Snapshots']
 
         # loop through list of image IDs
         for image in imagesList:
             print "deregistering image %s" % image
-            amiResponse = ec.deregister_image(
+            amiResponse = ec2_client.deregister_image(
                 DryRun=False,
                 ImageId=image,
             )
 
             for snapshot in snapshots:
                 if snapshot['Description'].find(image) > 0:
-                    snap = ec.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+                    snap = ec2_client.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+                    print "Deleting snapshot " + snapshot['SnapshotId']
+                    print "-------------"
+
+    else:
+        print "No current backup found. Termination suspended."
+
+import boto3
+import datetime
+import time
+
+ec2_client = boto3.client('ec2')
+ec2_resource = boto3.resource('ec2')
+images = ec2_resource.images.filter(Owners=["self"])
+
+def lambda_handler(event, context):
+
+    reservations = ec2_client.describe_instances(
+        Filters=[
+            {'Name': 'tag-key', 'Values': ['backup', 'Backup']},
+        ]
+    ).get(
+        'Reservations', []
+    )
+
+    instances = sum(
+        [
+            [i for i in r['Instances']]
+            for r in reservations
+        ], [])
+
+    print "Found %d instances that need evaluated" % len(instances)
+
+    date_fmt = datetime.datetime.now().strftime('%Y-%m-%d')
+
+    print "Current date: " + date_fmt
+
+    imagesList = []
+
+    # Set to true once we confirm we have a backup taken today
+    backupSuccess = False
+
+    # Loop through all of our instances with a tag named "Backup"
+    for instance in instances:
+        imagecount = 0
+
+        # Loop through each image of our current instance
+        for image in images:
+
+            # Our other Lambda Function names its AMIs Lambda - i-instancenumber.
+            # We now know these images are auto created
+            if image.name.startswith('Lambda - ' + instance['InstanceId']):
+
+                print "FOUND IMAGE " + image.id + " FOR INSTANCE " + instance['InstanceId']
+
+                # Count this image's occcurance
+                imagecount = imagecount + 1
+
+                try:
+                    if image.tags is not None:
+                        deletion_date = [
+                            t.get('Value') for t in image.tags
+                            if t['Key'] == 'DeleteOn'][0]
+                        delete_date = time.strptime(deletion_date, "%m-%d-%Y")
+                except IndexError:
+                    deletion_date = False
+                    delete_date = False
+
+                today_time = datetime.datetime.now().strftime('%m-%d-%Y')
+                today_date = time.strptime(today_time, '%m-%d-%Y')
+
+                # If image's DeleteOn date is less than or equal to today,
+                # add this image to our list of images to process later
+                if delete_date <= today_date:
+                    imagesList.append(image.id)
+
+                # Make sure we have an AMI from today and mark backupSuccess as true
+                if image.name.endswith(date_fmt):
+                    # Our latest backup from our other Lambda Function succeeded
+                    backupSuccess = True
+                    print "Latest backup from " + date_fmt + " was a success for " + instance['InstanceId']
+
+        print "instance " + instance['InstanceId'] + " has " + str(imagecount) + " AMIs"
+
+    print "============="
+
+    print "About to process the following AMIs:"
+    print imagesList
+
+    if backupSuccess == True:
+
+        snapshots = ec2_client.describe_snapshots(MaxResults=1000, OwnerIds=['self'])['Snapshots']
+
+        # loop through list of image IDs
+        for image in imagesList:
+            print "deregistering image %s" % image
+            amiResponse = ec2_client.deregister_image(
+                DryRun=False,
+                ImageId=image,
+            )
+
+            for snapshot in snapshots:
+                if snapshot['Description'].find(image) > 0:
+                    snap = ec2_client.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
                     print "Deleting snapshot " + snapshot['SnapshotId']
                     print "-------------"
 
